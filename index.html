@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lean4 証明補助ワークベンチ</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: #2d2d30;
+            padding: 15px 20px;
+            border-bottom: 1px solid #3e3e42;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #00bcd4;
+            margin-bottom: 10px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #005a9e;
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            background: #252526;
+            color: #d4d4d4;
+            font-size: 14px;
+        }
+
+        select {
+            padding: 8px;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            background: #252526;
+            color: #d4d4d4;
+            font-size: 14px;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #3e3e42;
+        }
+
+        .editor-container {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .CodeMirror {
+            height: 100%;
+            font-size: 14px;
+        }
+
+        .output-container {
+            height: 250px;
+            border-top: 1px solid #3e3e42;
+            background: #252526;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .output-container h3 {
+            color: #00bcd4;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .output-content {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .error {
+            color: #f48771;
+        }
+
+        .success {
+            color: #4ec9b0;
+        }
+
+        .right-panel {
+            width: 400px;
+            background: #252526;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            overflow: hidden;
+        }
+
+        .chat-container h2 {
+            color: #00bcd4;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #1e1e1e;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .message.user {
+            background: #2d2d30;
+            border-left: 3px solid #007acc;
+        }
+
+        .message.assistant {
+            background: #1e1e1e;
+            border-left: 3px solid #4ec9b0;
+        }
+
+        .message .role {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .message.user .role {
+            color: #007acc;
+        }
+
+        .message.assistant .role {
+            color: #4ec9b0;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+        }
+
+        .status-bar {
+            background: #007acc;
+            color: white;
+            padding: 5px 20px;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .file-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .divider {
+            height: 20px;
+            width: 1px;
+            background: #3e3e42;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔬 Lean4 証明補助ワークベンチ</h1>
+        <div class="toolbar">
+            <button id="runBtn" onclick="runCode()">▶ 実行</button>
+            <button id="checkBtn" onclick="checkSyntax()">✓ シンタクスチェック</button>
+
+            <div class="divider"></div>
+
+            <div class="file-controls">
+                <input type="text" id="filename" placeholder="ファイル名.lean" style="width: 150px;">
+                <button onclick="saveFile()">💾 保存</button>
+                <select id="fileList" onchange="loadSelectedFile()">
+                    <option value="">-- ファイルを選択 --</option>
+                </select>
+                <button onclick="refreshFileList()">🔄</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="editor-container">
+                <textarea id="editor">-- Lean4コードをここに入力してください
+
+theorem example_theorem : 2 + 2 = 4 := by
+  rfl
+
+#check example_theorem
+</textarea>
+            </div>
+            <div class="output-container">
+                <h3>実行結果</h3>
+                <div id="output" class="output-content">
+                    実行ボタンを押してコードを実行してください。
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="chat-container">
+                <h2>💬 AIアシスタント</h2>
+                <div id="chatMessages" class="chat-messages">
+                    <div class="message assistant">
+                        <div class="role">Assistant</div>
+                        <div>こんにちは！Lean4のコードについて質問があれば、お気軽にお尋ねください。</div>
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="質問を入力..." onkeypress="handleChatKeypress(event)">
+                    <button onclick="sendChatMessage()">送信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="statusBar" class="status-bar" style="display: none;">
+        <span class="spinner"></span> 処理中...
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/haskell/haskell.min.js"></script>
+    <script>
+        // CodeMirrorエディタの初期化
+        const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+            mode: 'haskell', // Lean4に近い構文
+            theme: 'monokai',
+            lineNumbers: true,
+            indentUnit: 2,
+            tabSize: 2,
+            lineWrapping: true,
+            autoCloseBrackets: true,
+            matchBrackets: true
+        });
+
+        // ステータスバーの表示/非表示
+        function showStatus(message) {
+            const statusBar = document.getElementById('statusBar');
+            statusBar.textContent = message;
+            statusBar.style.display = 'block';
+        }
+
+        function hideStatus() {
+            document.getElementById('statusBar').style.display = 'none';
+        }
+
+        // コードを実行
+        async function runCode() {
+            const code = editor.getValue();
+            const outputDiv = document.getElementById('output');
+
+            showStatus('実行中...');
+            document.getElementById('runBtn').disabled = true;
+
+            try {
+                const response = await fetch('/api/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ code: code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    outputDiv.innerHTML = `<div class="success">✓ 実行成功</div>\n${escapeHtml(result.output)}`;
+                } else {
+                    outputDiv.innerHTML = `<div class="error">✗ エラーが発生しました</div>\n${escapeHtml(result.errors || result.output)}`;
+                }
+            } catch (error) {
+                outputDiv.innerHTML = `<div class="error">通信エラー: ${escapeHtml(error.message)}</div>`;
+            } finally {
+                hideStatus();
+                document.getElementById('runBtn').disabled = false;
+            }
+        }
+
+        // シンタクスチェック
+        async function checkSyntax() {
+            await runCode(); // Lean4では実行とシンタクスチェックは同じ
+        }
+
+        // ファイルを保存
+        async function saveFile() {
+            const filename = document.getElementById('filename').value.trim();
+            if (!filename) {
+                alert('ファイル名を入力してください');
+                return;
+            }
+
+            if (!filename.endsWith('.lean')) {
+                alert('ファイル名は .lean で終わる必要があります');
+                return;
+            }
+
+            const code = editor.getValue();
+
+            showStatus('保存中...');
+
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename, code: code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    refreshFileList();
+                } else {
+                    alert('保存に失敗しました');
+                }
+            } catch (error) {
+                alert('保存エラー: ' + error.message);
+            } finally {
+                hideStatus();
+            }
+        }
+
+        // ファイル一覧を更新
+        async function refreshFileList() {
+            try {
+                const response = await fetch('/api/files');
+                const result = await response.json();
+
+                const fileList = document.getElementById('fileList');
+                fileList.innerHTML = '<option value="">-- ファイルを選択 --</option>';
+
+                if (result.success && result.files.length > 0) {
+                    result.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file;
+                        fileList.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('ファイル一覧の取得エラー:', error);
+            }
+        }
+
+        // 選択されたファイルを読み込み
+        async function loadSelectedFile() {
+            const fileList = document.getElementById('fileList');
+            const filename = fileList.value;
+
+            if (!filename) return;
+
+            showStatus('読み込み中...');
+
+            try {
+                const response = await fetch('/api/load', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    editor.setValue(result.code);
+                    document.getElementById('filename').value = filename;
+                } else {
+                    alert('読み込みに失敗しました');
+                }
+            } catch (error) {
+                alert('読み込みエラー: ' + error.message);
+            } finally {
+                hideStatus();
+            }
+        }
+
+        // チャットメッセージを送信
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            const code = editor.getValue();
+            const chatMessages = document.getElementById('chatMessages');
+
+            // ユーザーメッセージを表示
+            addMessage('user', message);
+            input.value = '';
+
+            showStatus('AIが考え中...');
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        code: code
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addMessage('assistant', result.response);
+                } else {
+                    addMessage('assistant', `エラー: ${result.response}`);
+                }
+            } catch (error) {
+                addMessage('assistant', `通信エラー: ${error.message}`);
+            } finally {
+                hideStatus();
+            }
+        }
+
+        // チャットメッセージを追加
+        function addMessage(role, content) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+
+            const roleDiv = document.createElement('div');
+            roleDiv.className = 'role';
+            roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+
+            const contentDiv = document.createElement('div');
+            contentDiv.textContent = content;
+
+            messageDiv.appendChild(roleDiv);
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+
+            // スクロールを最下部に
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Enterキーでチャット送信
+        function handleChatKeypress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+
+        // HTMLエスケープ
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 初期化時にファイル一覧を読み込み
+        refreshFileList();
+    </script>
+</body>
+</html>
